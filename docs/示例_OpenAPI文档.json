@@ -1,0 +1,326 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "spring-petclinic 接口文档",
+    "version": "1.0.0",
+    "description": "由 AI 辅助接口文档自动生成系统生成"
+  },
+  "paths": {
+    "/owners/new": {
+      "get": {
+        "summary": "显示新增宠物主人表单页面",
+        "operationId": "initCreationForm",
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      },
+      "post": {
+        "summary": "提交新增宠物主人信息，校验通过后保存并重定向到主人详情页",
+        "operationId": "processCreationForm",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owners/find": {
+      "get": {
+        "summary": "显示按姓氏搜索宠物主人的表单页面",
+        "operationId": "initFindForm",
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    },
+    "/owners": {
+      "get": {
+        "summary": "按姓氏查询宠物主人列表，无参数时返回全部记录",
+        "operationId": "processFindForm",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}（单人）或 owners/ownersList（多人）"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owners/{ownerId}/edit": {
+      "get": {
+        "summary": "显示编辑指定宠物主人信息的表单页面",
+        "operationId": "initUpdateOwnerForm",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "主人记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "404": {
+            "description": "主人记录不存在"
+          }
+        }
+      },
+      "post": {
+        "summary": "提交更新后的宠物主人信息，校验通过后保存并重定向到详情页",
+        "operationId": "processUpdateOwnerForm",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "主人记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owners/{ownerId}": {
+      "get": {
+        "summary": "根据主人ID查询并展示宠物主人及其宠物详情",
+        "operationId": "showOwner",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "主人记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "firstName": "George",
+                  "lastName": "Franklin",
+                  "address": "110 W. Liberty St.",
+                  "city": "Madison",
+                  "telephone": "6085551023",
+                  "pets": [
+                    {
+                      "name": "Leo",
+                      "birthDate": "2010-09-07",
+                      "type": "cat"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "主人记录不存在"
+          }
+        }
+      }
+    },
+    "/owners/{ownerId}/pets/new": {
+      "get": {
+        "summary": "显示为指定主人新增宠物的表单页面",
+        "operationId": "initCreationForm",
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      },
+      "post": {
+        "summary": "提交新增宠物信息，校验通过后保存并重定向到主人详情页",
+        "operationId": "processCreationForm",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owners/{ownerId}/pets/{petId}/edit": {
+      "get": {
+        "summary": "显示编辑指定宠物信息的表单页面",
+        "operationId": "initUpdateForm",
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      },
+      "post": {
+        "summary": "提交更新后的宠物信息，校验通过后保存并重定向到主人详情页",
+        "operationId": "processUpdateForm",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owners/*/pets/{petId}/visits/new": {
+      "get": {
+        "summary": "显示为指定宠物新增就诊记录的表单页面",
+        "operationId": "initNewVisitForm",
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "宠物记录ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    },
+    "/owners/{ownerId}/pets/{petId}/visits/new": {
+      "post": {
+        "summary": "提交新增就诊记录，校验通过后保存并重定向到主人详情页",
+        "operationId": "processNewVisitForm",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": "302 redirect → /owners/{ownerId}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oups": {
+      "get": {
+        "summary": "触发异常以演示 SpringBoot 全局异常处理",
+        "operationId": "triggerException",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "500": {
+            "description": "服务端内部错误(故意触发)"
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "系统首页欢迎页面",
+        "operationId": "welcome",
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    },
+    "/vets.html": {
+      "get": {
+        "summary": "以 HTML 页面形式展示所有兽医列表",
+        "operationId": "showVetList",
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    },
+    "/vets.json": {
+      "get": {
+        "summary": "以 JSON/XML 格式返回所有兽医列表数据",
+        "operationId": "showResourcesVetList",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "vets": [
+                    {
+                      "id": 1,
+                      "firstName": "James",
+                      "lastName": "Carter",
+                      "specialties": []
+                    },
+                    {
+                      "id": 2,
+                      "firstName": "Helen",
+                      "lastName": "Leary",
+                      "specialties": [
+                        {
+                          "name": "radiology"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
