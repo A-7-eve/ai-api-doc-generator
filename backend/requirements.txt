@@ -7,4 +7,4 @@ python-multipart==0.0.9
 jinja2==3.1.4
 pytest==8.3.0
 pyjwt==2.13.0
-pymysql==2.2.8
+pymysql==1.2.0

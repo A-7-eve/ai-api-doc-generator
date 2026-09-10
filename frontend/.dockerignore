@@ -1,0 +1,5 @@
+# 构建镜像时不需要复制的内容
+node_modules/
+dist/
+.vscode/
+*.log

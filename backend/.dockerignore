@@ -1,0 +1,7 @@
+# 构建镜像时不需要复制的内容
+__pycache__/
+*.pyc
+.env
+tests/
+.pytest_cache/
+.temp/

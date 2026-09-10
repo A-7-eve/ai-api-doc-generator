@@ -38,3 +38,4 @@ backend/data/*.db
 # ===== 环境变量（防泄漏） =====
 .env
 .env.*
+!.env.example

@@ -3,30 +3,25 @@ AIGC:
   ContentProducer: '001191110102MAD55U9H0F10002'
   ContentPropagator: '001191110102MAD55U9H0F10002'
   Label: '1'
-  ProduceID: '344e595f-1c07-489c-a2f9-dc7d75795aa2'
-  PropagateID: '344e595f-1c07-489c-a2f9-dc7d75795aa2'
-  ReservedCode1: 'd4807f3a-d08f-4e58-bc22-437ebb1c0ade'
-  ReservedCode2: 'd4807f3a-d08f-4e58-bc22-437ebb1c0ade'
+  ProduceID: '00d841d4-ca76-4a1d-b2f1-cea7b72dddc5'
+  PropagateID: '00d841d4-ca76-4a1d-b2f1-cea7b72dddc5'
+  ReservedCode1: 'f6f88685-f3c7-4e46-900f-80b728934313'
+  ReservedCode2: 'f6f88685-f3c7-4e46-900f-80b728934313'
 ---
 
 # AI辅助接口文档自动生成系统
 
 > 实训作业项目
 > 作者：易方涛
-> 日期：2026-08-24（v2.4 更新：2026-09-10，多语言解析 + 版本管理 + 文档在线编辑 + DeepSeek 接入）
+> 日期：2026-08-24（v2.5 更新：2026-09-10，Docker 一键部署 + 大模型双供应商）
 
 ## 项目简介
 
 解析 Java/SpringBoot、Python（FastAPI/Flask）、C 多语言项目代码，用 AI 大模型自动生成接口文档（OpenAPI 3.0 + Markdown），支持在线编辑后导出，包含接口描述、参数说明、示例数据、边界场景提示。
 
-## 技术栈
 
-- **后端**: Python 3.12 + FastAPI + javalang + httpx + PyJWT + PyMySQL
-- **前端**: Vue3 + Element Plus + Axios + Vue Router（5 个独立页面，路由懒加载 + 登录/角色双重守卫）
-- **AI**: DeepSeek（deepseek-chat，已接入），无 Key 时自动降级纯解析
-- **存储**: MySQL 8.0（项目/接口/文档/用户数据持久化，pymysql 驱动，utf8mb4）
 
-## v2.4 新增功能
+
 
 1. **多语言解析**：新增 Python（FastAPI/Flask 装饰器路由，ast 引擎）与 C（函数清单，正则引擎）解析引擎，上传混合语言项目自动识别并合并解析
 2. **版本管理**：引擎注册表（engine_registry）集中管理各语言引擎与语法版本范围，AST 解析失败自动降级正则模式并记入 engineInfo
@@ -57,50 +52,10 @@ AIGC:
 - 登录态使用 JWT（有效期 24 小时），过期自动跳回登录页
 - 兼容历史数据：v2.1 之前解析的项目无归属人，所有登录用户可见
 
-## 目录结构
 
-```
-AI辅助接口文档自动生成/
-├── docs/                    # 项目文档
-├── backend/                  # Python FastAPI 后端
-│   ├── main.py              # 入口
-│   ├── config.py            # 配置（Key 从 .env 读取）
-│   ├── .env                 # API Key 私有文件（不入仓库）
-│   ├── requirements.txt     # 依赖
-│   ├── models/              # 数据模型
-│   ├── parser/              # 多语言解析引擎
-│   │   ├── java_parser.py       # Java/SpringBoot（javalang AST）
-│   │   ├── python_parser.py     # Python/FastAPI/Flask（内置 ast）
-│   │   ├── c_parser.py          # C 函数清单（正则）
-│   │   ├── engine_registry.py   # 引擎注册表（版本管理）
-│   │   └── dispatcher.py        # 多语言分发器
-│   ├── ai/                  # AI 增强层
-│   ├── generator/           # 文档生成
-│   └── routers/             # API 路由
-├── frontend/                # Vue3 前端
-│   └── src/
-│       ├── views/           # 5 个页面视图（登录/工作台/项目历史/导出中心/用户管理）
-│       ├── components/      # 通用组件（接口树/接口详情）
-│       ├── router/          # 路由与守卫
-│       └── api/             # Axios 封装
-└── sample-project/          # 被解析的示例项目
-    ├── spring-petclinic/     # SpringBoot 示例（17 接口）
-    ├── flask-demo/           # Python 示例（FastAPI+Flask，11 接口）
-    └── c-demo/               # C 示例（6 函数）
-```
 
-## 快速开始
 
-### 1. 安装依赖
 
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2. 配置 MySQL（v2.3 起默认 MySQL 8.0）
-
-后端启动时会自动建库建表（默认连接 `127.0.0.1:3306`，用户 `root`），只需保证本机 MySQL 8.0 已启动。如需自定义连接，设置环境变量：
 
 ```bash
 set APIDOC_DB_HOST=127.0.0.1
@@ -115,7 +70,12 @@ set APIDOC_DB_NAME=apidoc
 创建 `backend/.env` 文件（已被 .gitignore 排除，不会提交到仓库）：
 
 ```
+# 默认供应商：DeepSeek
 LLM_API_KEY=sk-你的DeepSeekKey
+
+# 或切换为中电信星辰大模型（teleai）
+# LLM_PROVIDER=teleai
+# TELEAI_API_KEY=你的星辰Key
 ```
 
 或设置环境变量：
@@ -123,6 +83,8 @@ LLM_API_KEY=sk-你的DeepSeekKey
 ```bash
 set LLM_API_KEY=你的API Key
 ```
+
+供应商切换（v2.5）：`LLM_PROVIDER` 可选 `deepseek`（默认）/ `teleai`（中电信星辰，OpenAI 兼容）/ `custom`（任意 OpenAI 兼容接口），Key 按供应商隔离读取（deepseek 读 `LLM_API_KEY`，teleai 读 `TELEAI_API_KEY`）。
 
 未配置 Key 时系统自动降级为纯解析模式，功能不受影响（仅无 AI 增强）。
 
