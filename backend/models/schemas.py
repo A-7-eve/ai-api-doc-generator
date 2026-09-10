@@ -73,6 +73,10 @@ class ProjectMeta(BaseModel):
     controllers: list[ControllerMeta] = []
     dtos: list[DtoMeta] = []
     parseTime: Optional[str] = None
+    # 多语言支持（v2.4）：项目包含的语言列表，如 ["java", "python", "c"]
+    languages: list[str] = []
+    # 解析引擎信息（v2.4）：{"java": {"engine": "javalang-ast", "version": "1.0", "degraded": false}, ...}
+    engineInfo: dict = {}
     # 归属信息（角色功能）
     ownerUserId: Optional[str] = None
     ownerName: Optional[str] = None

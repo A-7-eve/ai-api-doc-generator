@@ -3,6 +3,7 @@
 - 所有接口需登录（Bearer Token）
 - 普通用户：解析/查看/导出/编辑自己的项目
 - 管理员：以上全部 + 查看所有人项目 + 删除项目
+- v2.4：多语言解析（dispatcher 分发）+ 文档在线编辑（doc 端点）
 """
 
 import os
@@ -18,11 +19,11 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from models.schemas import ProjectMeta, EndpointMeta
-from parser.java_parser import parse_project
+from parser.dispatcher import parse_project_any
 from ai.enhancer import enhance_all, enhance_endpoint
 from generator.openapi_gen import generate_openapi
 from generator.markdown_gen import generate_markdown
-from store import projects, endpoints
+from store import projects, endpoints, docs
 from config import SAMPLE_PROJECT_PATH
 from security import get_current_user, require_admin, check_project_owner
 
@@ -60,40 +61,46 @@ async def parse(
         project_path = await _save_and_extract_zip(file)
 
     project_name = os.path.basename(os.path.normpath(project_path))
+    project = await _parse_and_store(project_path, project_name, user)
+    return project.model_dump()
 
-    # 解析项目
+
+async def _parse_and_store(project_path: str, project_name: str, user) -> ProjectMeta:
+    """解析项目并入库（/parse 与 /parse-sample 公共逻辑）"""
     try:
-        project = parse_project(project_path)
+        project = parse_project_any(project_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败: {e}")
+
+    if not project.controllers and not project.engineInfo.get("detected", True):
+        raise HTTPException(
+            status_code=422,
+            detail="未发现可解析的源码文件（支持 Java/Python/C 项目）",
+        )
 
     project.projectId = str(uuid.uuid4())
     project.projectName = project_name
     project.ownerUserId = user.userId
     project.ownerName = user.username
 
-    # 生成 endpointId 并存入 SQLite
     for ctrl in project.controllers:
         ctrl.controllerId = str(uuid.uuid4())
         for ep in ctrl.endpoints:
             ep.endpointId = str(uuid.uuid4())
             endpoints.set_with_project(ep.endpointId, ep, project.projectId)
 
-    # 存入 SQLite
     projects[project.projectId] = project
 
-    # AI 增强（异步并发）
     all_endpoints = [
         ep for ctrl in project.controllers for ep in ctrl.endpoints
     ]
     await enhance_all(all_endpoints)
 
-    # 增强后更新存储
     for ep in all_endpoints:
         endpoints.set_with_project(ep.endpointId, ep, project.projectId)
     projects[project.projectId] = project
 
-    return project.model_dump()
+    return project
 
 
 @router.get("/project")
@@ -185,18 +192,21 @@ async def export_project(
     format: str = "openapi",
     user=Depends(get_current_user),
 ):
-    """导出文档：后端直接返回文件流并设置文件名（修复下载文件名丢失问题）"""
+    """导出文档：后端直接返回文件流并设置文件名（修复下载文件名丢失问题）
+
+    v2.4：若存在用户编辑版（docs 表），优先返回编辑版，与在线预览一致
+    """
     project = projects.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     check_project_owner(project, user)
 
     if format == "openapi":
-        content = generate_openapi(project)
+        content = docs.get(project_id, "openapi") or generate_openapi(project)
         filename = f"{project.projectName}_openapi.json"
         media_type = "application/json"
     elif format == "markdown":
-        content = generate_markdown(project)
+        content = docs.get(project_id, "markdown") or generate_markdown(project)
         filename = f"{project.projectName}_api_doc.md"
         media_type = "text/markdown"
     else:
@@ -215,6 +225,89 @@ async def export_project(
         )
     }
     return PlainTextResponse(content=content, media_type=media_type, headers=headers)
+
+
+# ========== v2.4 文档在线编辑 ==========
+
+
+@router.get("/project/{project_id}/doc")
+async def get_doc(
+    project_id: str,
+    format: str = "markdown",
+    user=Depends(get_current_user),
+):
+    """获取文档内容：优先返回用户编辑版，无则现场生成
+
+    返回 {content, edited}：edited=True 表示当前内容来自用户编辑版
+    """
+    project = projects.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    check_project_owner(project, user)
+
+    if format not in ("openapi", "markdown"):
+        raise HTTPException(status_code=422, detail="format 仅支持 openapi 或 markdown")
+
+    edited_content = docs.get(project_id, format)
+    if edited_content is not None:
+        return {"content": edited_content, "edited": True}
+
+    generated = (
+        generate_openapi(project) if format == "openapi" else generate_markdown(project)
+    )
+    return {"content": generated, "edited": False}
+
+
+@router.put("/project/{project_id}/doc")
+async def save_doc(
+    project_id: str,
+    body: dict,
+    user=Depends(get_current_user),
+):
+    """保存文档编辑版 body: {format, content}"""
+    project = projects.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    check_project_owner(project, user)
+
+    fmt = body.get("format", "")
+    content = body.get("content")
+    if fmt not in ("openapi", "markdown"):
+        raise HTTPException(status_code=422, detail="format 仅支持 openapi 或 markdown")
+    if not isinstance(content, str) or not content.strip():
+        raise HTTPException(status_code=422, detail="content 不能为空")
+
+    docs.set(project_id, fmt, content)
+    logger.info(f"用户 {user.username} 保存文档编辑版: {project_id} ({fmt})")
+    return {"success": True, "edited": True}
+
+
+@router.post("/project/{project_id}/doc/reset")
+async def reset_doc(
+    project_id: str,
+    body: dict,
+    user=Depends(get_current_user),
+):
+    """清除编辑版，恢复生成器现场生成版 body: {format}"""
+    project = projects.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    check_project_owner(project, user)
+
+    fmt = body.get("format", "")
+    if fmt not in ("openapi", "markdown"):
+        raise HTTPException(status_code=422, detail="format 仅支持 openapi 或 markdown")
+
+    had_edited = docs.reset(project_id, fmt)
+    if had_edited:
+        logger.info(f"用户 {user.username} 重置文档: {project_id} ({fmt})")
+
+    # 返回重置后的生成版内容，前端直接刷新预览
+    project = projects.get(project_id)
+    generated = (
+        generate_openapi(project) if fmt == "openapi" else generate_markdown(project)
+    )
+    return {"success": True, "edited": False, "content": generated}
 
 
 def _check_endpoint_owner(endpoint_id: str, user):
@@ -263,37 +356,5 @@ async def parse_sample(user=Depends(get_current_user)):
         )
 
     project_name = os.path.basename(os.path.normpath(SAMPLE_PROJECT_PATH))
-
-    # 解析项目
-    try:
-        project = parse_project(SAMPLE_PROJECT_PATH)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"解析失败: {e}")
-
-    project.projectId = str(uuid.uuid4())
-    project.projectName = project_name
-    project.ownerUserId = user.userId
-    project.ownerName = user.username
-
-    # 生成 endpointId 并存入 SQLite
-    for ctrl in project.controllers:
-        ctrl.controllerId = str(uuid.uuid4())
-        for ep in ctrl.endpoints:
-            ep.endpointId = str(uuid.uuid4())
-            endpoints.set_with_project(ep.endpointId, ep, project.projectId)
-
-    # 存入 SQLite
-    projects[project.projectId] = project
-
-    # AI 增强（异步并发）
-    all_endpoints = [
-        ep for ctrl in project.controllers for ep in ctrl.endpoints
-    ]
-    await enhance_all(all_endpoints)
-
-    # 增强后更新存储
-    for ep in all_endpoints:
-        endpoints.set_with_project(ep.endpointId, ep, project.projectId)
-    projects[project.projectId] = project
-
+    project = await _parse_and_store(SAMPLE_PROJECT_PATH, project_name, user)
     return project.model_dump()

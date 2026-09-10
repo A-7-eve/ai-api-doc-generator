@@ -98,6 +98,26 @@ export async function exportProject(projectId, format) {
   return res
 }
 
+// ========== 文档在线编辑（v2.4） ==========
+
+// 获取文档内容（优先编辑版，无则生成版）；返回 { content, edited }
+export async function getDoc(projectId, format) {
+  const res = await api.get(`/project/${projectId}/doc`, { params: { format } })
+  return res.data
+}
+
+// 保存文档编辑版
+export async function saveDoc(projectId, format, content) {
+  const res = await api.put(`/project/${projectId}/doc`, { format, content })
+  return res.data
+}
+
+// 重置文档（清除编辑版，恢复生成版）；返回 { content, edited }
+export async function resetDoc(projectId, format) {
+  const res = await api.post(`/project/${projectId}/doc/reset`, { format })
+  return res.data
+}
+
 // 从 Content-Disposition 响应头中提取文件名（支持 filename*=UTF-8'' 编码格式）
 export function getFilenameFromDisposition(disposition, fallback) {
   if (!disposition) return fallback

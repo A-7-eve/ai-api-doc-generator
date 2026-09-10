@@ -13,6 +13,15 @@ from models.schemas import EndpointMeta
 
 logger = logging.getLogger(__name__)
 
+
+def _get_language(endpoint: EndpointMeta) -> str:
+    """获取接口来源语言（v2.4 多语言自适应提示词）；dispatcher 未标记时返回空串"""
+    try:
+        from parser.dispatcher import get_endpoint_language
+        return get_endpoint_language(endpoint)
+    except Exception:
+        return ""
+
 # 并发信号量
 _semaphore: asyncio.Semaphore | None = None
 
@@ -42,6 +51,7 @@ async def enhance_endpoint(endpoint: EndpointMeta, dto_context: str = "") -> End
     endpoint_dict = {
         "className": "",
         "baseUrl": "",
+        "language": _get_language(endpoint),
         "method": endpoint.method.value,
         "path": endpoint.path,
         "fullPath": endpoint.fullPath,

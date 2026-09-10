@@ -1,13 +1,15 @@
-"""MySQL 持久化存储：项目数据、接口数据和用户数据的持久化存储。
+"""MySQL 持久化存储：项目数据、接口数据、文档数据和用户数据的持久化存储。
 
 演进历史：内存 dict → SQLite → MySQL 8.0（pymysql 驱动）。
 对外暴露与原 dict 接口兼容的 ProjectStore / EndpointStore，使上层路由无需改动。
-users 表 + UserStore 为角色功能新增。
+users 表 + UserStore 为角色功能新增；
+docs 表 + DocStore 为 v2.4 在线编辑功能新增。
 
-表结构（沿用原三张表）：
+表结构：
 - projects(project_id PK, project_data JSON 文本, created_at)
 - endpoints(endpoint_id PK, project_id, endpoint_data, updated_at)
 - users(user_id PK, username UNIQUE, password_hash, role, created_at)
+- docs(project_id + format 联合主键, content, updated_at)  ← v2.4
 """
 
 import uuid
@@ -132,6 +134,17 @@ def _init_db():
                     created_at    VARCHAR(64) NOT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
+            # v2.4 在线编辑：文档编辑版存储表（联合主键 project_id+format）
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS docs (
+                    project_id VARCHAR(64) NOT NULL,
+                    format     VARCHAR(16) NOT NULL,
+                    content    MEDIUMTEXT NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (project_id, format)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
         conn.commit()
         if not _index_exists(conn, "idx_endpoints_project"):
             with conn.cursor() as cur:
@@ -247,6 +260,9 @@ class ProjectStore:
                     deleted = cur.rowcount > 0
                     cur.execute(
                         "DELETE FROM endpoints WHERE project_id = %s", (project_id,)
+                    )
+                    cur.execute(
+                        "DELETE FROM docs WHERE project_id = %s", (project_id,)
                     )
                 conn.commit()
                 return deleted
@@ -496,7 +512,76 @@ class UserStore:
                 conn.close()
 
 
+class DocStore:
+    """文档编辑版存储（v2.4 在线编辑）
+
+    docs 表按 (project_id, format) 存用户编辑后的文档内容；
+    reset 删除记录即回退到生成器现场生成版。
+    """
+
+    def get(self, project_id: str, fmt: str) -> Optional[str]:
+        """获取编辑版内容，无记录返回 None"""
+        with _lock:
+            conn = _get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT content FROM docs WHERE project_id = %s AND format = %s",
+                        (project_id, fmt),
+                    )
+                    row = cur.fetchone()
+            finally:
+                conn.close()
+        return row["content"] if row else None
+
+    def set(self, project_id: str, fmt: str, content: str):
+        """保存编辑版内容（upsert）"""
+        with _lock:
+            conn = _get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "REPLACE INTO docs (project_id, format, content) VALUES (%s, %s, %s)",
+                        (project_id, fmt, content),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def reset(self, project_id: str, fmt: str) -> bool:
+        """删除编辑版记录（回退到生成版），有删除返回 True"""
+        with _lock:
+            conn = _get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM docs WHERE project_id = %s AND format = %s",
+                        (project_id, fmt),
+                    )
+                    deleted = cur.rowcount > 0
+                conn.commit()
+                return deleted
+            finally:
+                conn.close()
+
+    def delete_by_project(self, project_id: str) -> bool:
+        """删除项目下全部编辑版文档（项目删除时联动清理）"""
+        with _lock:
+            conn = _get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM docs WHERE project_id = %s", (project_id,)
+                    )
+                    deleted = cur.rowcount > 0
+                conn.commit()
+                return deleted
+            finally:
+                conn.close()
+
+
 # 对外暴露的存储实例（接口与原 dict 兼容）
 projects = ProjectStore()
 endpoints = EndpointStore()
 users = UserStore()
+docs = DocStore()
